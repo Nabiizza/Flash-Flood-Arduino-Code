@@ -1,0 +1,86 @@
+#include <NewPing.h>
+#include <SoftwareSerial.h>
+
+#define TRIGGER_PIN1   8
+#define ECHO_PIN1      9
+
+#define TRIGGER_PIN2  10
+#define ECHO_PIN2     11
+
+#define TRIGGER_PIN3  12
+#define ECHO_PIN3     13
+
+#define MAX_DISTANCE 10000
+
+NewPing sonar1(TRIGGER_PIN1, ECHO_PIN1, MAX_DISTANCE);
+NewPing sonar2(TRIGGER_PIN2, ECHO_PIN2, MAX_DISTANCE);
+NewPing sonar3(TRIGGER_PIN3, ECHO_PIN3, MAX_DISTANCE);
+
+#define TX_PIN 7
+#define RX_PIN 6
+
+SoftwareSerial mySerial(TX_PIN, RX_PIN);
+
+#define std_dev_range 10
+#define alarming_water_level 70.0
+
+void setup() {
+  // put your setup code here, to run once:
+  Serial.begin(9600);
+  mySerial.begin(9600);
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+  double water_level = get_water_level();
+  Serial.println(water_level);
+  send_message(water_level);
+  delay(10000);
+}
+
+double get_water_level()
+{
+  int ping1 = 0;
+  int ping2 = 100;
+  int ping3 = 200;
+
+  while(get_std_dev(ping1,ping2,ping3)>std_dev_range||get_avg(ping1,ping2,ping3)==0)
+  {
+    ping1 = sonar1.ping_cm();
+    ping2 = sonar2.ping_cm();
+    ping3 = sonar3.ping_cm();
+  }
+
+  return get_avg(ping1,ping2,ping3);
+}
+
+void send_message(double water_level)
+{
+ String msg = String ("Token:HwoEweVdFGks==,AreaId:123,DeviceId:121,WaterLevel:") + String(water_level)+String(",Time: 2018-Feb-19 12:50");
+ /*if(water_level<alarming_water_level)
+ {
+    msg += "\n\nFlood Alarm!!!";
+  }
+  */
+ mySerial.println("AT+CMGF=1");
+  delay(1000);
+  mySerial.println("AT+CMGS=\"+8801685755487\"\r");
+  delay(1000);
+  mySerial.println(msg);
+  delay(100);
+  mySerial.println((char)26);
+  delay(1000);
+}
+
+int get_std_dev(int a,int b,int c)
+{
+  int low = min(a,min(b,c));
+  int high = max(a,max(b,c));
+  
+  return high - low;
+}
+
+float get_avg(float  a,float b,float c)
+{
+  return (a+b+c)/3.0;
+}
