@@ -1,0 +1,127 @@
+#include <DS3231.h>
+#include <SD.h>
+#include <SPI.h> //load the SPI communication library
+#include <NewPing.h>
+#include <SoftwareSerial.h>
+
+#define TRIGGER_PIN1   8
+#define ECHO_PIN1      9
+
+#define TRIGGER_PIN2  10
+#define ECHO_PIN2     11
+
+#define TRIGGER_PIN3  12
+#define ECHO_PIN3     13
+
+#define MAX_DISTANCE 10000
+
+NewPing sonar1(TRIGGER_PIN1, ECHO_PIN1, MAX_DISTANCE);
+NewPing sonar2(TRIGGER_PIN2, ECHO_PIN2, MAX_DISTANCE);
+NewPing sonar3(TRIGGER_PIN3, ECHO_PIN3, MAX_DISTANCE);
+
+#define TX_PIN 7
+#define RX_PIN 6
+
+SoftwareSerial mySerial(TX_PIN, RX_PIN);
+
+#define std_dev_range 10
+#define alarming_water_level 70.0
+
+
+ int chipSelect = 53;
+ File mySensorData;
+ DS3231  rtc(SDA, SCL);
+
+
+void setup() {
+  // put your setup code here, to run once:
+  Serial.begin(9600);
+ // Setup Serial connection
+
+  mySerial.begin(9600);
+  pinMode (53,OUTPUT);// Reserve pin 24 for output,don't use it for anything else
+ SD.begin(chipSelect); //initialize SD card with chipSelect connected to pin 53
+ rtc.begin();
+  
+}
+
+
+
+void loop() {
+  // put your main code here, to run repeatedly:
+  double water_level = get_water_level();
+/*
+  Serial.print(rtc.getTimeStr());
+  Serial.print(",");
+  Serial.print(water_level);
+  Serial.print(",");
+  Serial.println(int(rtc.getTemp())); */
+  mySensorData = SD.open("FLData.txt" , FILE_WRITE); // open FLData in the SD card as a file to write to
+  if (mySensorData){
+     mySensorData.print(rtc.getTimeStr());
+    mySensorData.print(",");  
+     mySensorData.println(water_level); 
+     mySensorData.print(",");   
+    mySensorData.println(int(rtc.getTemp()));
+  send_message(water_level);
+  delay(2000);
+  mySensorData.close();
+}
+}
+
+double get_water_level()
+{
+  int ping1 = 0;
+  int ping2 = 100;
+  int ping3 = 200;
+
+  while(get_std_dev(ping1,ping2,ping3)>std_dev_range||get_avg(ping1,ping2,ping3)==0)
+  {
+    ping1 = sonar1.ping_cm();
+    ping2 = sonar2.ping_cm();
+    ping3 = sonar3.ping_cm();
+  }
+
+  return get_avg(ping1,ping2,ping3);
+}
+
+void send_message(double water_level)
+{
+ String msg = "Token:HwoEweVdFGks==";
+ String msg1 = "DeviceId:121";
+ String msg2 = "AreaID:123";
+ String msg3 = "waterlevel:" + String(water_level, 3);
+
+ if(water_level<alarming_water_level)
+ {
+    //msg += "\n\nFlood Alarm!!!";
+  }
+ mySerial.println("AT+CMGF=1");
+ mySerial.println("AT+CMGS=\"+8801756705611\"\r");
+ mySerial.println(msg);
+ Serial.println(msg);
+ Serial.println(msg1);
+ Serial.println(msg2);
+ Serial.println(msg3);
+
+
+  delay(100);
+  mySerial.println((char)26);
+
+  mySensorData.println(msg);
+
+  delay(1000);
+}
+
+int get_std_dev(int a,int b,int c)
+{
+  int low = min(a,min(b,c));
+  int high = max(a,max(b,c));
+  
+  return high - low;
+}
+
+float get_avg(float  a,float b,float c)
+{
+  return (a+b+c)/3.0;
+}
